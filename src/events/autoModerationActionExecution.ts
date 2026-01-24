@@ -2,12 +2,12 @@ import {
 	AutoModerationActionExecutionListener,
 	type Client,
 	type ListenerEventData,
-	Container,
 	ListenerEvent,
 	Routes,
-	Separator,
 	TextDisplay,
-	serializePayload
+	Webhook,
+	serializePayload,
+	type MessagePayloadObject
 } from "@buape/carbon"
 import { readFile } from "node:fs/promises"
 
@@ -21,7 +21,19 @@ type AutomodMessageMap = Record<string, AutomodRuleConfig>
 type AutoModerationActionExecutionData =
 	ListenerEventData[typeof ListenerEvent.AutoModerationActionExecution]
 
+type WebhookCacheEntry = {
+	webhook: Webhook
+	fetchedAt: number
+}
+
+type WebhookSendPayload = MessagePayloadObject & {
+	username?: string
+	avatar_url?: string
+}
+
 const automodMessagesUrl = new URL("../config/automod-messages.json", import.meta.url)
+const webhookCache = new Map<string, WebhookCacheEntry>()
+const webhookCacheTtlMs = 15 * 60 * 1000
 
 const normalizeKeyword = (keyword: string) => keyword.trim().toLowerCase()
 
@@ -43,6 +55,67 @@ const formatAutomodMessage = (template: string, data: AutoModerationActionExecut
 		.replaceAll("{keyword}", data.matched_keyword ?? "")
 		.replaceAll("{content}", data.matched_content ?? data.content ?? "")
 
+const cleanupWebhookCache = () => {
+	const now = Date.now()
+	for (const [channelId, entry] of webhookCache.entries()) {
+		if (now - entry.fetchedAt > webhookCacheTtlMs) {
+			webhookCache.delete(channelId)
+		}
+	}
+}
+
+const fetchChannelWebhooks = async (client: Client, channelId: string) => {
+	return (await client.rest.get(Routes.channelWebhooks(channelId))) as {
+		id: string
+		token?: string
+	}[]
+}
+
+const createChannelWebhook = async (client: Client, channelId: string) => {
+	return (await client.rest.post(Routes.channelWebhooks(channelId), {
+		body: { name: "Barnacle Automod" }
+	})) as { id: string; token?: string }
+}
+
+const getOrCreateWebhook = async (client: Client, channelId: string) => {
+	cleanupWebhookCache()
+	const cached = webhookCache.get(channelId)
+	if (cached) {
+		return cached.webhook
+	}
+
+	const existingWebhooks = await fetchChannelWebhooks(client, channelId)
+	const usableWebhook = existingWebhooks.find((webhook) => webhook.token)
+	const webhookData = usableWebhook ?? (await createChannelWebhook(client, channelId))
+
+	if (!webhookData.token) {
+		throw new Error("Webhook token missing for automod response")
+	}
+
+	const webhook = new Webhook({ id: webhookData.id, token: webhookData.token })
+	webhookCache.set(channelId, { webhook, fetchedAt: Date.now() })
+	return webhook
+}
+
+const sendWebhookMessage = async (webhook: Webhook, payload: WebhookSendPayload) => {
+	const serialized = serializePayload(payload)
+	await webhook.rest.post(webhook.urlWithOptions({ wait: true, withComponents: true }), {
+		body: serialized
+	})
+}
+
+const resolveMember = async (data: AutoModerationActionExecutionData) => {
+	if (!data.guild) {
+		return null
+	}
+	try {
+		return await data.guild.fetchMember(data.user_id)
+	} catch (error) {
+		console.error("Failed to fetch guild member:", error)
+		return null
+	}
+}
+
 export default class AutoModerationActionExecution extends AutoModerationActionExecutionListener {
 	async handle(data: ListenerEventData[this["type"]], client: Client) {
 		if (!data.channel_id || !data.matched_keyword) {
@@ -53,10 +126,6 @@ export default class AutoModerationActionExecution extends AutoModerationActionE
 		const ruleConfig = messages[data.rule_id]
 
 		if (!ruleConfig) {
-			return
-		}
-
-		if (!data.matched_keyword) {
 			return
 		}
 
@@ -76,26 +145,31 @@ export default class AutoModerationActionExecution extends AutoModerationActionE
 			: "<redacted>"
 
 		const warningMessage = formatAutomodMessage(ruleConfig.message, data)
-		const payload = serializePayload({
-			components: [
-				new Container(
-					[
-						new TextDisplay("**Original Message**"),
-						new TextDisplay(redactedContent),
-						new Separator({ divider: true, spacing: "small" }),
-						new TextDisplay(warningMessage)
-					],
-					{ accentColor: "#f85149" }
-				)
-			],
+		const warningPayload = serializePayload({
+			components: [new TextDisplay(warningMessage)],
 			allowedMentions: {
 				users: [data.user_id]
 			}
 		})
 
 		try {
+			const webhook = await getOrCreateWebhook(client, data.channel_id)
+			const member = await resolveMember(data)
+			const displayName =
+				member?.nickname ||
+				data.user?.globalName ||
+				data.user?.username ||
+				"Unknown User"
+			const avatarUrl = member?.avatarUrl || data.user?.avatarUrl || undefined
+
+			await sendWebhookMessage(webhook, {
+				components: [new TextDisplay(redactedContent)],
+				username: displayName,
+				avatar_url: avatarUrl
+			})
+
 			await client.rest.post(Routes.channelMessages(data.channel_id), {
-				body: payload
+				body: warningPayload
 			})
 		} catch (error) {
 			console.error("Failed to send automod response:", error)
