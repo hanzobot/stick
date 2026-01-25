@@ -34,6 +34,18 @@ class GotoStuckCommand extends GotoCommand {
 	protected message = `The fastest way to get your problem solved is to follow the instructions here: <${stuckLink}>`
 }
 
+class GotoDocsCommand extends GotoCommand {
+	name = "docs"
+	description = "Share the docs link"
+	protected message = "Docs are available at <https://docs.clawd.bot>."
+}
+
+class GotoInstallCommand extends GotoCommand {
+	name = "install"
+	description = "Share the install script link"
+	protected message = "Install instructions are available at <https://clawd.bot>."
+}
+
 export default class GotoRootCommand extends CommandWithSubcommands {
 	name = "goto"
 	description = "Jump to common resources"
@@ -42,6 +54,8 @@ export default class GotoRootCommand extends CommandWithSubcommands {
 		new GotoHelpCommand(),
 		new GotoServerFaqCommand(),
 		new GotoGuideCommand(),
-		new GotoStuckCommand()
+		new GotoStuckCommand(),
+		new GotoDocsCommand(),
+		new GotoInstallCommand()
 	]
 }
