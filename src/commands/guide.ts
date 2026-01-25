@@ -17,7 +17,7 @@ export default class GuideCommand extends BaseCommand {
 	async run(interaction: CommandInteraction) {
 		const user = interaction.options.getUser("user")
 		const prefix = user ? `<@${user.id}>\n` : ""
-		const message = `${prefix}## Check the Server Guide here\n${guideLink}`
+		const message = `${prefix}## Your question is answered in the server FAQ in our [Server Guide](${guideLink})`
 
 		await interaction.reply({
 			content: message
