@@ -17,7 +17,7 @@ export default class HelpCommand extends BaseCommand {
 	async run(interaction: CommandInteraction) {
 		const user = interaction.options.getUser("user")
 		const prefix = user ? `<@${user.id}>\n` : ""
-		const message = `${prefix}Use <#1459642797895319552> for help. The fastest way to get your problem solved is to follow the instructions here: ${stuckLink}`
+		const message = `${prefix}Any discussion about various AI models should be taken to <#1456704705219661980>. The fastest way to get your problem solved is to follow the instructions here: ${stuckLink}`
 
 		await interaction.reply({
 			content: message
