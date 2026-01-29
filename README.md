@@ -25,7 +25,7 @@ bun run dev
 
 ## Commands
 
-- `/github` - Look up an issue or PR (defaults to clawdbot/clawdbot)
+- `/github` - Look up an issue or PR (defaults to bot/bot)
 
 ## Gateway Events
 

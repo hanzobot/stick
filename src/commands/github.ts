@@ -83,20 +83,20 @@ export default class GithubCommand extends BaseCommand {
 		},
 		{
 			name: "user",
-			description: "Repository owner (default: clawdbot)",
+			description: "Repository owner (default: bot)",
 			type: ApplicationCommandOptionType.String
 		},
 		{
 			name: "repo",
-			description: "Repository name (default: clawdbot)",
+			description: "Repository name (default: bot)",
 			type: ApplicationCommandOptionType.String
 		}
 	]
 
 	async run(interaction: CommandInteraction) {
 		const number = interaction.options.getInteger("number", true)
-		const owner = interaction.options.getString("user") ?? "clawdbot"
-		const repo = interaction.options.getString("repo") ?? "clawdbot"
+		const owner = interaction.options.getString("user") ?? "bot"
+		const repo = interaction.options.getString("repo") ?? "bot"
 		const repoName = `${owner}/${repo}`
 		const apiUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${number}`
 
